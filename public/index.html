@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Productos - FakeStore API</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Gestor de Productos</h1>
+            <p>FakeStore API Integration</p>
+        </header>
+
+        <div class="controls">
+            <div class="section">
+                <h2>Obtener Productos</h2>
+                <button id="getAllProducts">Obtener Todos</button>
+                <div class="get-one">
+                    <input type="number" id="getProductId" placeholder="ID del producto">
+                    <button id="getOneProduct">Obtener Producto</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Crear Producto</h2>
+                <div class="form-group">
+                    <input type="text" id="newTitle" placeholder="Título">
+                </div>
+                <div class="form-group">
+                    <input type="number" id="newPrice" placeholder="Precio">
+                </div>
+                <div class="form-group">
+                    <input type="text" id="newCategory" placeholder="Categoría">
+                </div>
+                <button id="createProduct">Crear Producto</button>
+            </div>
+
+            <div class="section">
+                <h2>Eliminar Producto</h2>
+                <div class="form-group">
+                    <input type="number" id="deleteId" placeholder="ID del producto">
+                    <button id="deleteProduct">Eliminar Producto</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="products-container" id="productsContainer">
+
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
