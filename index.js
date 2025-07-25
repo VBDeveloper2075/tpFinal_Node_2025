@@ -1,45 +1,48 @@
 // FakeStore API
-import { createServer } from 'http';
+import express from 'express';
+import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { readFile } from 'fs/promises';
+import dotenv from 'dotenv';
+
+// Configurar dotenv
+dotenv.config();
 
 const API_URL = 'https://fakestoreapi.com';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const serveStaticFile = async (res, filePath, contentType) => {
-  try {
-    const content = await readFile(join(__dirname, filePath), 'utf8');
-    res.writeHead(200, { 'Content-Type': contentType });
-    res.end(content);
-  } catch (error) {
-    res.writeHead(500);
-    res.end('Error interno del servidor');
-    console.error(`Error al servir ${filePath}:`, error);
-  }
-};
+// Crear aplicación Express
+const app = express();
 
-const server = createServer(async (req, res) => {
-  const url = req.url;
+// Configurar middlewares
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-  // Rutas 
-  if (url === '/' || url === '/index.html') {
-    await serveStaticFile(res, 'public/index.html', 'text/html');
-  } else if (url === '/styles.css') {
-    await serveStaticFile(res, 'public/styles.css', 'text/css');
-  } else if (url === '/app.js') {
-    await serveStaticFile(res, 'public/app.js', 'text/javascript');
-  } else {
-    res.writeHead(404);
-    res.end('Página no encontrada');
-  }
+// Servir archivos estáticos desde la carpeta public
+app.use(express.static(join(__dirname, 'public')));
+
+// Ruta principal - servir index.html
+app.get('/', (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'index.html'));
+});
+
+// Middleware para manejo de errores 404
+app.use((req, res) => {
+  res.status(404).send('Página no encontrada');
+});
+
+// Middleware para manejo de errores globales
+app.use((error, req, res, next) => {
+  console.error('Error del servidor:', error);
+  res.status(500).send('Error interno del servidor');
 });
 
 // Iniciar el servidor si NO se están ejecutando comandos CLI
 if (process.argv.length <= 2) {
-  const PORT = 3000;
-  server.listen(PORT, () => {
-    console.log(`Servidor corriendo en http://localhost:${PORT}`);
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`Servidor Express corriendo en http://localhost:${PORT}`);
   });
 } else {
   // Funcionalidad de línea de comandos
