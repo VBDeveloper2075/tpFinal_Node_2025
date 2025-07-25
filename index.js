@@ -1,6 +1,7 @@
 // FakeStore API
 import express from 'express';
 import cors from 'cors';
+import bodyParser from 'body-parser';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import dotenv from 'dotenv';
@@ -15,9 +16,91 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 
 // Configurar middlewares
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Configuración avanzada de CORS para aplicaciones Frontend empresariales
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Obtener orígenes permitidos desde variables de entorno
+    const allowedOrigins = process.env.CORS_ORIGIN ? 
+      process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()) : 
+      ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8080', 'http://localhost:4200'];
+    
+    // Permitir requests sin origen (ej: aplicaciones móviles, Postman)
+    if (!origin) return callback(null, true);
+    
+    // Verificar si el origen está en la lista permitida
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origen ${origin} no permitido por la política CORS`));
+    }
+  },
+  credentials: process.env.CORS_CREDENTIALS === 'true', // Habilitar cookies/credenciales
+  methods: process.env.CORS_METHODS ? 
+    process.env.CORS_METHODS.split(',').map(method => method.trim()) : 
+    ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+  allowedHeaders: process.env.CORS_ALLOWED_HEADERS ? 
+    process.env.CORS_ALLOWED_HEADERS.split(',').map(header => header.trim()) : 
+    ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200, // Para navegadores legacy (IE11, varios SmartTVs)
+  maxAge: 86400 // Cache preflight por 24 horas
+};
+
+app.use(cors(corsOptions));
+
+// Configuración avanzada de Body-Parser para interpretar JSON
+app.use(bodyParser.json({ 
+  limit: '10mb', // Limite de 10MB para peticiones JSON
+  strict: true, // Solo acepta arrays y objetos como JSON válido
+  type: ['application/json', 'application/*+json'], // Tipos MIME que se interpretan como JSON
+  verify: (req, res, buf, encoding) => {
+    // Verificación personalizada del JSON (opcional)
+    if (buf && buf.length) {
+      req.rawBody = buf.toString(encoding || 'utf8');
+    }
+  }
+}));
+
+// Body-parser para datos de formularios URL-encoded
+app.use(bodyParser.urlencoded({ 
+  extended: true, // Permite objetos y arrays anidados
+  limit: '10mb', // Limite de 10MB
+  parameterLimit: 1000, // Máximo 1000 parámetros
+  type: 'application/x-www-form-urlencoded'
+}));
+
+// Body-parser para texto plano
+app.use(bodyParser.text({ 
+  limit: '10mb',
+  type: 'text/plain'
+}));
+
+// Body-parser para datos raw/buffer
+app.use(bodyParser.raw({ 
+  limit: '10mb',
+  type: 'application/octet-stream'
+}));
+
+// Middleware de validación JSON personalizado
+app.use((req, res, next) => {
+  // Validar que el Content-Type sea correcto para peticiones con body
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    const contentType = req.get('Content-Type');
+    
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Body recibido:`, 
+        typeof req.body === 'object' ? 'JSON válido' : 'Formato: ' + typeof req.body);
+    }
+  }
+  next();
+});
+
+// Middleware de logging para peticiones
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  const origin = req.get('Origin') || 'No origin';
+  console.log(`[${timestamp}] ${req.method} ${req.path} - Origin: ${origin}`);
+  next();
+});
 
 // Servir archivos estáticos desde la carpeta public
 app.use(express.static(join(__dirname, 'public')));
@@ -25,6 +108,82 @@ app.use(express.static(join(__dirname, 'public')));
 // Ruta principal - servir index.html
 app.get('/', (req, res) => {
   res.sendFile(join(__dirname, 'public', 'index.html'));
+});
+
+// Ruta de prueba para verificar CORS
+app.get('/api/test-cors', (req, res) => {
+  res.json({
+    message: 'CORS está funcionando correctamente',
+    origin: req.get('Origin') || 'No origin specified',
+    timestamp: new Date().toISOString(),
+    allowedMethods: corsOptions.methods,
+    status: 'success'
+  });
+});
+
+// Ruta de prueba para verificar Body-Parser con JSON
+app.post('/api/test-json', (req, res) => {
+  console.log('Body recibido:', req.body);
+  console.log('Raw body:', req.rawBody);
+  
+  res.json({
+    message: 'Body-parser está funcionando correctamente',
+    receivedData: req.body,
+    dataType: typeof req.body,
+    contentType: req.get('Content-Type'),
+    bodySize: req.rawBody ? req.rawBody.length : 0,
+    timestamp: new Date().toISOString(),
+    status: 'success'
+  });
+});
+
+// Ruta de prueba para verificar Body-Parser con form-data
+app.post('/api/test-form', (req, res) => {
+  console.log('Form data recibido:', req.body);
+  
+  res.json({
+    message: 'Form data procesado correctamente',
+    receivedData: req.body,
+    dataType: typeof req.body,
+    contentType: req.get('Content-Type'),
+    timestamp: new Date().toISOString(),
+    status: 'success'
+  });
+});
+
+// Ruta de prueba para verificar Body-Parser con texto plano
+app.post('/api/test-text', (req, res) => {
+  console.log('Texto recibido:', req.body);
+  
+  res.json({
+    message: 'Texto plano procesado correctamente',
+    receivedText: req.body,
+    textLength: req.body ? req.body.length : 0,
+    contentType: req.get('Content-Type'),
+    timestamp: new Date().toISOString(),
+    status: 'success'
+  });
+});
+
+// Ruta para obtener información de configuración CORS (útil para debugging)
+app.get('/api/cors-info', (req, res) => {
+  const allowedOrigins = process.env.CORS_ORIGIN ? 
+    process.env.CORS_ORIGIN.split(',').map(origin => origin.trim()) : 
+    ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:8080', 'http://localhost:4200'];
+  
+  res.json({
+    corsConfiguration: {
+      allowedOrigins,
+      credentials: process.env.CORS_CREDENTIALS === 'true',
+      methods: corsOptions.methods,
+      allowedHeaders: corsOptions.allowedHeaders
+    },
+    requestInfo: {
+      origin: req.get('Origin') || 'No origin',
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date().toISOString()
+    }
+  });
 });
 
 // Middleware para manejo de errores 404
