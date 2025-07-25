@@ -9,6 +9,8 @@ import dotenv from 'dotenv';
 // Importar rutas
 import productsRoutes from './routes/products.routes.js';
 import authRoutes from './routes/auth.routes.js';
+import firestoreRoutes from './routes/firestore.routes.js';
+import firebaseTestRoutes from './routes/firebase-test.routes.js';
 
 // Configurar dotenv
 dotenv.config();
@@ -112,6 +114,8 @@ app.use(express.static(join(__dirname, 'public')));
 // Configurar rutas de la API
 app.use('/api/products', productsRoutes);
 app.use('/auth', authRoutes);
+app.use('/api/firestore', firestoreRoutes);
+app.use('/api/firebase', firebaseTestRoutes);
 
 // Ruta principal - servir index.html
 app.get('/', (req, res) => {

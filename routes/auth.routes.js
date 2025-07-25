@@ -1,130 +1,32 @@
 // Rutas para autenticación de usuarios
 import express from 'express';
-import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import authService from '../services/auth.service.js';
 
 const router = express.Router();
-
-// Simulación de base de datos de usuarios (en producción sería una BD real)
-const users = [
-  {
-    id: 1,
-    username: 'admin',
-    email: 'admin@empresa.com',
-    password: 'admin123', // En producción debe estar hasheada
-    role: 'admin',
-    firstName: 'Administrador',
-    lastName: 'Sistema'
-  },
-  {
-    id: 2,
-    username: 'usuario',
-    email: 'usuario@empresa.com',
-    password: 'user123', // En producción debe estar hasheada
-    role: 'user',
-    firstName: 'Usuario',
-    lastName: 'Empresa'
-  },
-  {
-    id: 3,
-    username: 'manager',
-    email: 'manager@empresa.com',
-    password: 'manager123', // En producción debe estar hasheada
-    role: 'manager',
-    firstName: 'Manager',
-    lastName: 'Productos'
-  }
-];
-
-// Clave secreta para JWT (en producción debe estar en variables de entorno)
-const JWT_SECRET = process.env.JWT_SECRET || 'tu_clave_secreta_super_segura_2025';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 
 // POST /auth/login - Autenticación de usuarios
 router.post('/login', async (req, res) => {
   try {
-    const { username, password, email } = req.body;
+    const result = await authService.authenticateUser(req.body);
     
-    console.log(`[${new Date().toISOString()}] POST /auth/login - Intento de login para: ${username || email}`);
-    
-    // Validar que se proporcionen credenciales
-    if ((!username && !email) || !password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Credenciales incompletas. Se requiere username/email y password',
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // Buscar usuario por username o email
-    const user = users.find(u => 
-      (username && u.username.toLowerCase() === username.toLowerCase()) ||
-      (email && u.email.toLowerCase() === email.toLowerCase())
-    );
-    
-    // Verificar si el usuario existe
-    if (!user) {
-      console.log(`[${new Date().toISOString()}] LOGIN FAILED - Usuario no encontrado: ${username || email}`);
-      return res.status(401).json({
-        success: false,
-        message: 'Credenciales inválidas',
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // Verificar contraseña (en producción usar bcrypt)
-    if (user.password !== password) {
-      console.log(`[${new Date().toISOString()}] LOGIN FAILED - Contraseña incorrecta para: ${user.username}`);
-      return res.status(401).json({
-        success: false,
-        message: 'Credenciales inválidas',
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // Crear payload para el JWT
-    const payload = {
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role,
-      firstName: user.firstName,
-      lastName: user.lastName
-    };
-    
-    // Generar JWT token
-    const token = jwt.sign(payload, JWT_SECRET, { 
-      expiresIn: JWT_EXPIRES_IN,
-      issuer: 'tpFinal_Node_2025',
-      audience: 'empresa-frontend'
-    });
-    
-    console.log(`[${new Date().toISOString()}] LOGIN SUCCESS - Usuario autenticado: ${user.username} (${user.role})`);
-    
-    // Respuesta exitosa
     res.json({
       success: true,
       message: 'Autenticación exitosa',
-      data: {
-        user: {
-          id: user.id,
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          firstName: user.firstName,
-          lastName: user.lastName
-        },
-        token: `Bearer ${token}`,
-        tokenType: 'Bearer',
-        expiresIn: JWT_EXPIRES_IN
-      },
+      data: result,
       timestamp: new Date().toISOString()
     });
     
   } catch (error) {
-    console.error('Error en el proceso de login:', error);
+    console.error('Error en ruta POST /auth/login:', error);
+    
+    if (error.message.includes('incompletas') || error.message.includes('inválidas') || error.message.includes('desactivada')) {
+      return res.status(401).json({
+        success: false,
+        message: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: 'Error interno del servidor durante la autenticación',
@@ -134,8 +36,8 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// GET /auth/verify - Verificar token (ruta adicional útil)
-router.get('/verify', (req, res) => {
+// GET /auth/verify - Verificar token
+router.get('/verify', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
     
@@ -147,35 +49,25 @@ router.get('/verify', (req, res) => {
       });
     }
     
-    const token = authHeader.substring(7); // Remover "Bearer "
+    const token = authHeader.substring(7);
+    const decoded = await authService.verifyToken(token);
     
-    jwt.verify(token, JWT_SECRET, (err, decoded) => {
-      if (err) {
-        return res.status(401).json({
-          success: false,
-          message: 'Token inválido o expirado',
-          error: err.message,
-          timestamp: new Date().toISOString()
-        });
-      }
-      
-      res.json({
-        success: true,
-        message: 'Token válido',
-        data: {
-          user: decoded,
-          tokenValid: true
-        },
-        timestamp: new Date().toISOString()
-      });
+    res.json({
+      success: true,
+      message: 'Token válido',
+      data: {
+        user: decoded,
+        tokenValid: true
+      },
+      timestamp: new Date().toISOString()
     });
     
   } catch (error) {
-    console.error('Error al verificar token:', error);
-    res.status(500).json({
+    console.error('Error en ruta GET /auth/verify:', error);
+    
+    return res.status(401).json({
       success: false,
-      message: 'Error interno del servidor al verificar token',
-      error: error.message,
+      message: error.message,
       timestamp: new Date().toISOString()
     });
   }
@@ -183,30 +75,34 @@ router.get('/verify', (req, res) => {
 
 // GET /auth/users - Obtener lista de usuarios disponibles (solo para desarrollo)
 router.get('/users', (req, res) => {
-  if (process.env.NODE_ENV === 'production') {
-    return res.status(403).json({
+  try {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(403).json({
+        success: false,
+        message: 'Endpoint no disponible en producción',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    const users = authService.getAllUsers();
+    
+    res.json({
+      success: true,
+      message: 'Lista de usuarios disponibles (solo desarrollo)',
+      data: users,
+      count: users.length,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Error en ruta GET /auth/users:', error);
+    res.status(500).json({
       success: false,
-      message: 'Endpoint no disponible en producción',
+      message: 'Error interno del servidor al obtener usuarios',
+      error: error.message,
       timestamp: new Date().toISOString()
     });
   }
-  
-  const safeUsers = users.map(user => ({
-    id: user.id,
-    username: user.username,
-    email: user.email,
-    role: user.role,
-    firstName: user.firstName,
-    lastName: user.lastName
-    // No incluir password
-  }));
-  
-  res.json({
-    success: true,
-    message: 'Lista de usuarios disponibles (solo desarrollo)',
-    data: safeUsers,
-    timestamp: new Date().toISOString()
-  });
 });
 
 export default router;
